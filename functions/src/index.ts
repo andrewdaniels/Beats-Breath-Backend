@@ -237,6 +237,61 @@ exports.migrateInMailerLite = functions
     res.status(200).send(`userDocs, ${userDocs.docs.length}`);
   });
 
+exports.createAffiliatePartners = functions.firestore
+  .document("users/{userId}/purchaser-info/{purchaserInfoId}")
+  .onCreate(async (snap, context) => {
+    const userId = context.params.userId;
+    await checkUserIsNotExistAndCreate(userId);
+
+    let userDoc = await getFirestore().collection("users").doc(userId).get();
+    const userData = userDoc.data();
+
+    if (!userData?.affiliateCode) {
+      logger.log("No affiliate codes");
+      logger.log({
+        message: "User is not coming throve from affiliate code",
+        userId,
+      });
+      return;
+    }
+    const affiliatedUser = await getFirestore()
+      .collection("users")
+      .where("myAffiliateCode", "==", userData.affiliateCode)
+      .get();
+
+    if (affiliatedUser.empty) {
+      logger.log("No affiliated user found");
+      logger.log({
+        message: "affiliateCode not found.",
+        userId,
+        affiliateCode: userData.affiliateCode,
+      });
+      return;
+    }
+
+    const affiliateUserData = affiliatedUser.docs[0].data();
+    logger.info(affiliateUserData);
+    const affiliatedUserId = affiliatedUser.docs[0].id;
+
+    // create affiliate partner
+    await getFirestore()
+      .collection("users")
+      .doc(affiliatedUserId)
+      .collection("affiliate_partners")
+      .doc(context.params.userId)
+      .set({
+        affiliateRef: affiliatedUser.docs[0].ref,
+        affiliateCode: userData.affiliateCode,
+        createdAt: new Date(),
+      });
+
+    // increment count by one
+    await affiliatedUser.docs[0].ref.update({
+      totalAffiliateAccountCount:
+        (affiliateUserData.totalAffiliateAccountCount ?? 0) + 1,
+    });
+  });
+
 //  "firestore": {
 //     "port": 8080
 //   },
