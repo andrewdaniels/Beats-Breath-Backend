@@ -77,3 +77,37 @@ export async function checkUserIsNotExistAndCreate(userId: string) {
     });
   }
 }
+
+export async function updateUserParams(
+  mailerLiteUserId: string,
+  params: Object
+) {
+  const headers = {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${process.env.MAILERLITE_TOKEN}`,
+    Accept: "application/json",
+  };
+
+  const data = await axios.put(
+    `https://connect.mailerlite.com/api/subscribers/${mailerLiteUserId}`,
+    {
+      fields: {
+        ...params,
+      },
+    },
+    { headers }
+  );
+  logger.log(data.status);
+  logger.log(data.data.data);
+  if (data.status === 200) {
+    logger.log({
+      mailerLiteId: data.data.data.id,
+      fields: data.data.data.fields,
+    });
+    return {
+      mailerLiteId: data.data.data.id as string,
+      fields: data.data.data.fields as Object,
+    };
+  }
+  throw new Error("MailerLite user update failed");
+}

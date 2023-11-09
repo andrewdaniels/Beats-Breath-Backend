@@ -29,6 +29,7 @@ import {
   checkUserIsNotExistAndCreate,
   mailerLiteUserCreate,
   mailerLiteUserUpdate,
+  updateUserParams,
 } from "./mailerlite-user-create.function";
 
 initializeApp();
@@ -289,6 +290,45 @@ exports.createAffiliatePartners = functions.firestore
     await affiliatedUser.docs[0].ref.update({
       totalAffiliateAccountCount:
         (affiliateUserData.totalAffiliateAccountCount ?? 0) + 1,
+    });
+  });
+
+exports.createAndUpdateUserNameInMailerLite = functions.firestore
+  .document("users/{userId}")
+  .onUpdate(async (change, context) => {
+    const userId = context.params.userId;
+    const newValue = change.after.data();
+    const oldValue = change.before.data();
+
+    // check
+    await checkUserIsNotExistAndCreate(userId);
+
+    logger.log("newValue", newValue);
+    logger.log("oldValue", oldValue);
+
+    let isChanged = false;
+    if (newValue.firstName !== oldValue.firstName) {
+      isChanged = true;
+    }
+    if (newValue.lastName !== oldValue.lastName) {
+      isChanged = true;
+    }
+
+    if (!isChanged) {
+      logger.log("No change in name");
+      return;
+    }
+
+    let userDoc = await getFirestore().collection("users").doc(userId).get();
+    if (!userDoc.exists) {
+      throw new Error("User does not exist");
+    }
+    const userData = userDoc.data();
+    const mailerLiteUserId: string = userData!.mailerLiteUserId;
+
+    await updateUserParams(mailerLiteUserId, {
+      firstname: newValue.firstName,
+      lastname: newValue.lastName,
     });
   });
 
