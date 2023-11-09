@@ -332,6 +332,50 @@ exports.createAndUpdateUserNameInMailerLite = functions.firestore
     });
   });
 
+exports.addUserNameInMailerLiteMigration = functions
+  .runWith({
+    // Ensure the function has enough memory and time
+    // to process large files
+    timeoutSeconds: 540,
+  })
+  .https.onRequest(async (req, res: functions.Response<string>) => {
+    let userDocs = await getFirestore().collection("users").get();
+    logger.log("userDocs", userDocs.docs.length);
+    logger.log(req.query);
+    const iFrom: number = +(req.query.startFrom ?? 0);
+
+    for (let i = iFrom; i < userDocs.docs.length; i++) {
+      logger.log(
+        "going for user",
+        i,
+        "of",
+        userDocs.docs.length,
+        "  ",
+        userDocs.docs[i].id
+      );
+      const userData = userDocs.docs[i].data();
+
+      if (!userData?.mailerLiteUserId) {
+        logger.error(userDocs.docs[i].id, {
+          message: "mailerLiteUserId not found",
+        });
+        continue;
+      }
+
+      if (userData.firstName && userData.lastName) {
+        const mailerLiteUserId: string = userData!.mailerLiteUserId;
+        await updateUserParams(mailerLiteUserId, {
+          firstname: userData.firstName,
+          lastname: userData.lastName,
+        });
+      }
+    }
+    res
+      .status(200)
+      .send(
+        `userDocs, ${userDocs.docs.length}, Migration successfully completed`
+      );
+  });
 //  "firestore": {
 //     "port": 8080
 //   },
