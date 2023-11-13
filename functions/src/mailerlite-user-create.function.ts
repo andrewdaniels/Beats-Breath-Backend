@@ -88,18 +88,23 @@ export async function updateUserParams(
     Accept: "application/json",
   };
 
-  const data = await axios.put(
-    `https://connect.mailerlite.com/api/subscribers/${mailerLiteUserId}`,
-    {
-      fields: {
-        ...params,
+  const data = await axios
+    .put(
+      `https://connect.mailerlite.com/api/subscribers/${mailerLiteUserId}`,
+      {
+        fields: {
+          ...params,
+        },
       },
-    },
-    { headers }
-  );
-  logger.log(data.status);
-  logger.log(data.data.data);
-  if (data.status === 200) {
+      { headers }
+    )
+    .catch(function (error) {
+      logger.error(error);
+      throw new Error("MailerLite user update failed");
+    });
+  logger.log(data?.status);
+  logger.log(data?.data.data);
+  if (data?.status === 200 || data?.status === 201) {
     logger.log({
       mailerLiteId: data.data.data.id,
       fields: data.data.data.fields,

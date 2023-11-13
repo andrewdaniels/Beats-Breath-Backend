@@ -327,8 +327,8 @@ exports.createAndUpdateUserNameInMailerLite = functions.firestore
     const mailerLiteUserId: string = userData!.mailerLiteUserId;
 
     await updateUserParams(mailerLiteUserId, {
-      firstname: newValue.firstName,
-      lastname: newValue.lastName,
+      firstname: newValue.firstName ?? "",
+      lastname: newValue.lastName ?? "",
     });
   });
 
@@ -343,8 +343,15 @@ exports.addUserNameInMailerLiteMigration = functions
     logger.log("userDocs", userDocs.docs.length);
     logger.log(req.query);
     const iFrom: number = +(req.query.startFrom ?? 0);
+    const endTo: number = +(req.query.endTo ?? userDocs.docs.length);
 
-    for (let i = iFrom; i < userDocs.docs.length; i++) {
+    const bothNamePresent: string[] = [];
+    const firstNamePresent: string[] = [];
+    const lastNamePresent: string[] = [];
+    const mailerLiteUserIdNotPresent: string[] = [];
+    const bothNameNotPresent: string[] = [];
+
+    for (let i = iFrom; i < endTo; i++) {
       logger.log(
         "going for user",
         i,
@@ -359,22 +366,43 @@ exports.addUserNameInMailerLiteMigration = functions
         logger.error(userDocs.docs[i].id, {
           message: "mailerLiteUserId not found",
         });
+        mailerLiteUserIdNotPresent.push(userDocs.docs[i].id);
         continue;
       }
-
       if (userData.firstName && userData.lastName) {
+        bothNamePresent.push(userDocs.docs[i].id);
+      } else if (userData.firstName) {
+        firstNamePresent.push(userDocs.docs[i].id);
+      } else if (userData.lastName) {
+        lastNamePresent.push(userDocs.docs[i].id);
+      } else {
+        bothNameNotPresent.push(userDocs.docs[i].id);
+      }
+
+      if (userData.firstName || userData.lastName) {
         const mailerLiteUserId: string = userData!.mailerLiteUserId;
         await updateUserParams(mailerLiteUserId, {
-          firstname: userData.firstName,
-          lastname: userData.lastName,
+          firstname: userData.firstName ?? "",
+          lastname: userData.lastName ?? "",
         });
       }
     }
-    res
-      .status(200)
-      .send(
-        `userDocs, ${userDocs.docs.length}, Migration successfully completed`
-      );
+    const outPutData = {
+      bothNamePresent,
+      firstNamePresent,
+      lastNamePresent,
+      bothNameNotPresent,
+      mailerLiteUserIdNotPresent,
+      totalLength: userDocs.docs.length,
+      bothNamePresentLength: bothNamePresent.length,
+      firstNamePresentLength: firstNamePresent.length,
+      lastNamePresentLength: lastNamePresent.length,
+      bothNameNotPresentLength: bothNameNotPresent.length,
+      mailerLiteUserIdNotPresentLength: mailerLiteUserIdNotPresent.length,
+    };
+    logger.log(outPutData);
+    res.status(200).send(JSON.stringify(outPutData));
+    return;
   });
 //  "firestore": {
 //     "port": 8080
