@@ -329,6 +329,7 @@ exports.createAndUpdateUserNameInMailerLite = functions.firestore
     await updateUserParams(mailerLiteUserId, {
       firstname: newValue.firstName ?? "",
       lastname: newValue.lastName ?? "",
+      name: `${newValue.firstName ?? ""} ${newValue.lastName ?? ""}`,
     });
   });
 
@@ -384,10 +385,13 @@ exports.addUserNameInMailerLiteMigration = functions
         await updateUserParams(mailerLiteUserId, {
           firstname: userData.firstName ?? "",
           lastname: userData.lastName ?? "",
+          name: `${userData.firstName ?? ""} ${userData.lastName ?? ""}`,
         });
       }
     }
     const outPutData = {
+      iFrom,
+      endTo,
       bothNamePresent,
       firstNamePresent,
       lastNamePresent,
