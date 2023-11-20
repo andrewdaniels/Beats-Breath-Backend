@@ -288,8 +288,9 @@ exports.createAffiliatePartners = functions.firestore
 
     // increment count by one
     await affiliatedUser.docs[0].ref.update({
-      totalAffiliateAccountCount:
-        (affiliateUserData.totalAffiliateAccountCount ?? 0) + 1,
+      totalAffiliateCount: (affiliateUserData.totalAffiliateCount ?? 0) + 1,
+      remainingPayAffiliateCount:
+        (affiliateUserData.remainingPayAffiliateCount ?? 0) + 1,
     });
   });
 
