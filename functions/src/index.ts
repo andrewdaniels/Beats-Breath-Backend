@@ -315,6 +315,10 @@ exports.createAndUpdateUserNameInMailerLite = functions.firestore
       isChanged = true;
     }
 
+    if (newValue.display_name !== oldValue.display_name) {
+      isChanged = true;
+    }
+
     if (!isChanged) {
       logger.log("No change in name");
       return;
@@ -330,7 +334,7 @@ exports.createAndUpdateUserNameInMailerLite = functions.firestore
     await updateUserParams(mailerLiteUserId, {
       firstname: newValue.firstName ?? "",
       lastname: newValue.lastName ?? "",
-      name: `${newValue.firstName ?? ""} ${newValue.lastName ?? ""}`,
+      name: userData?.display_name ?? "",
     });
   });
 
@@ -352,6 +356,8 @@ exports.addUserNameInMailerLiteMigration = functions
     const lastNamePresent: string[] = [];
     const mailerLiteUserIdNotPresent: string[] = [];
     const bothNameNotPresent: string[] = [];
+    const displayNamePresent: string[] = [];
+    const displayNameNotPresent: string[] = [];
 
     for (let i = iFrom; i < endTo; i++) {
       logger.log(
@@ -380,13 +386,18 @@ exports.addUserNameInMailerLiteMigration = functions
       } else {
         bothNameNotPresent.push(userDocs.docs[i].id);
       }
+      if (userData?.display_name) {
+        displayNamePresent.push(userDocs.docs[i].id);
+      } else {
+        displayNameNotPresent.push(userDocs.docs[i].id);
+      }
 
-      if (userData.firstName || userData.lastName) {
+      if (userData.firstName || userData.lastName || userData.display_name) {
         const mailerLiteUserId: string = userData!.mailerLiteUserId;
         await updateUserParams(mailerLiteUserId, {
           firstname: userData.firstName ?? "",
           lastname: userData.lastName ?? "",
-          name: `${userData.firstName ?? ""} ${userData.lastName ?? ""}`,
+          name: userData.display_name ?? "",
         });
       }
     }
@@ -398,12 +409,16 @@ exports.addUserNameInMailerLiteMigration = functions
       lastNamePresent,
       bothNameNotPresent,
       mailerLiteUserIdNotPresent,
+      displayNamePresent,
+      displayNameNotPresent,
       totalLength: userDocs.docs.length,
       bothNamePresentLength: bothNamePresent.length,
       firstNamePresentLength: firstNamePresent.length,
       lastNamePresentLength: lastNamePresent.length,
       bothNameNotPresentLength: bothNameNotPresent.length,
       mailerLiteUserIdNotPresentLength: mailerLiteUserIdNotPresent.length,
+      displayNamePresentLength: displayNamePresent.length,
+      displayNameNotPresentLength: displayNameNotPresent.length,
     };
     logger.log(outPutData);
     res.status(200).send(JSON.stringify(outPutData));
