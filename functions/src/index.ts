@@ -79,6 +79,201 @@ exports.onCreatePurchaserInfo = functions.firestore
     // perform desired operations ...
   });
 
+exports.onCreateRevenuecatEventsForAffiliate = functions.firestore
+  .document("revenuecat_events/{event_id}")
+  .onCreate(async (snap, context) => {
+    const newValue = snap.data();
+    logger.debug({ new_value: newValue });
+    logger.info({ "Event Type ": newValue.event_type });
+
+    // for Non renewing purchase
+    if (newValue.event_type == "NON_RENEWING_PURCHASE") {
+      logger.debug("Start NON_RENEWING_PURCHASE function");
+      const store = newValue.store;
+      logger.info(`Store value is ${store}`);
+
+      const productId = newValue.product_id;
+      const price = newValue.price;
+      const appUserId = newValue.app_user_id;
+      logger.info({ productId, price, appUserId });
+
+      logger.debug("Going to get user data");
+      let userDoc = await getFirestore()
+        .collection("users")
+        .doc(appUserId)
+        .get();
+      if (!userDoc.exists) {
+        throw new Error("User does not exist");
+      } else {
+        logger.debug({ "User Data": userDoc.data() });
+      }
+      const affiliateCode: string = userDoc.data()?.affiliateCode ?? "";
+      const isCheckedForAffiliate: boolean =
+        userDoc.data()?.isCheckedForAffiliate ?? false;
+      logger.info(
+        `User Id ${appUserId}, isCheckedForAffiliate : ${isCheckedForAffiliate}, Affiliate code ${affiliateCode}`
+      );
+      if (isCheckedForAffiliate) {
+        logger.info(
+          `User is already checked for affiliate program. ${appUserId}`
+        );
+        return;
+      }
+      if (affiliateCode.length == 0) {
+        logger.info(`User is not coming form affiliateCode ${appUserId}`);
+        return;
+      }
+      const affiliatedUsers = await getFirestore()
+        .collection("users")
+        .where("myAffiliateCode", "==", affiliateCode)
+        .get();
+
+      if (affiliatedUsers.empty) {
+        logger.log("No affiliated user found");
+        logger.log({
+          message: "affiliateCode not found.",
+          appUserId,
+          affiliateCode: affiliateCode,
+        });
+        return;
+      }
+      const affiliatedUser = affiliatedUsers.docs[0];
+      logger.debug(
+        `Check 15% = price * 0.15 = ${price} * 0.15 = ${price * 0.15}`
+      );
+      const data = {
+        totalAffiliateCount:
+          (affiliatedUser.data().totalAffiliateCount ?? 0) + 1,
+        remainingPayAffiliateCount:
+          (affiliatedUser.data().remainingPayAffiliateCount ?? 0) + 1,
+        totalLifeTimeAffiliate:
+          (affiliatedUser.data().totalLifeTimeAffiliate ?? 0) + 1,
+        totalLifeTimeRemainingAffiliate:
+          (affiliatedUser.data().totalLifeTimeRemainingAffiliate ?? 0) + 1,
+        totalLifeTimeAffiliateAmount:
+          (affiliatedUser.data().totalLifeTimeAffiliateAmount ?? 0) +
+          price * 0.15,
+        remainingLifeTimeAffiliateAmount:
+          (affiliatedUser.data().remainingLifeTimeAffiliateAmount ?? 0) +
+          price * 0.15,
+      };
+      logger.debug(data);
+      await affiliatedUser.ref.update({ data });
+      logger.debug("Going for mark as true isCheckedForAffiliate");
+      await userDoc.ref.update({ isCheckedForAffiliate: true });
+      logger.info("Update done.");
+      logger.info("Function Done. Going for return.");
+      return;
+    }
+
+    if (newValue.event_type == "RENEWAL") {
+      logger.debug("Start RENEWAL function");
+      const store = newValue.store;
+      logger.info(`Store value is ${store}`);
+
+      const productId = newValue.product_id;
+      const price = newValue.price;
+      const appUserId = newValue.app_user_id;
+      logger.info({ productId, price, appUserId });
+
+      logger.debug("Going to get user data");
+      let userDoc = await getFirestore()
+        .collection("users")
+        .doc(appUserId)
+        .get();
+      if (!userDoc.exists) {
+        throw new Error("User does not exist");
+      } else {
+        logger.debug({ "User Data": userDoc.data() });
+      }
+      const affiliateCode: string = userDoc.data()?.affiliateCode ?? "";
+      const isCheckedForAffiliate: boolean =
+        userDoc.data()?.isCheckedForAffiliate ?? false;
+      logger.info(
+        `User Id ${appUserId}, isCheckedForAffiliate : ${isCheckedForAffiliate}, Affiliate code ${affiliateCode}`
+      );
+      if (isCheckedForAffiliate) {
+        logger.info(
+          `User is already checked for affiliate program. ${appUserId}`
+        );
+        return;
+      }
+      if (affiliateCode.length == 0) {
+        logger.info(`User is not coming form affiliateCode ${appUserId}`);
+        return;
+      }
+      const affiliatedUsers = await getFirestore()
+        .collection("users")
+        .where("myAffiliateCode", "==", affiliateCode)
+        .get();
+
+      if (affiliatedUsers.empty) {
+        logger.log("No affiliated user found");
+        logger.log({
+          message: "affiliateCode not found.",
+          appUserId,
+          affiliateCode: affiliateCode,
+        });
+        return;
+      }
+      const affiliatedUser = affiliatedUsers.docs[0];
+      logger.debug(
+        `Check 15% = price * 0.15 = ${price} * 0.15 = ${price * 0.15}`
+      );
+      const affiliatedUserData = affiliatedUser.data();
+      // check for product id
+
+      let newMap = {};
+      switch (productId) {
+        case "bb_annual" || "bb-annual" || "full_access:bb-annual":
+          newMap = {
+            totalAnnualAffiliate:
+              (affiliatedUserData.totalAnnualAffiliate ?? 0) + 1,
+            totalAnnualRemainingAffiliate:
+              (affiliatedUserData.totalAnnualRemainingAffiliate ?? 0) + 1,
+            totalAnnualAffiliateAmount:
+              (affiliatedUserData.totalAnnualAffiliateAmount ?? 0) +
+              price * 0.15,
+            remainingAnnualAffiliateAmount:
+              (affiliatedUserData.remainingAnnualAffiliateAmount ?? 0) +
+              price * 0.15,
+          };
+          break;
+        case "bb_monthly" || "bb-monthly" || "full_access:bb-monthly":
+          newMap = {
+            totalMonthlyAffiliate:
+              (affiliatedUserData.totalMonthlyAffiliate ?? 0) + 1,
+            totalMonthlyRemainingAffiliate:
+              (affiliatedUserData.totalMonthlyRemainingAffiliate ?? 0) + 1,
+            totalMonthlyAffiliateAmount:
+              (affiliatedUserData.totalMonthlyAffiliateAmount ?? 0) +
+              price * 0.15,
+            remainingMonthlyAffiliateAmount:
+              (affiliatedUserData.remainingMonthlyAffiliateAmount ?? 0) +
+              price * 0.15,
+          };
+          break;
+
+        default:
+          throw new Error("Subscription is not matched.");
+      }
+
+      const data = {
+        totalAffiliateCount: (affiliatedUserData.totalAffiliateCount ?? 0) + 1,
+        remainingPayAffiliateCount:
+          (affiliatedUserData.remainingPayAffiliateCount ?? 0) + 1,
+        ...newMap,
+      };
+      logger.debug(data);
+      await affiliatedUser.ref.update({ data });
+      logger.debug("Going for mark as true isCheckedForAffiliate");
+      await userDoc.ref.update({ isCheckedForAffiliate: true });
+      logger.info("Update done.");
+      logger.info("Function Done. Going for return.");
+      return;
+    }
+  });
+
 exports.onCreateRevenuecatEvents = functions.firestore
   .document("revenuecat_events/{event_id}")
   .onCreate(async (snap, context) => {
