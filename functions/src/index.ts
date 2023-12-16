@@ -56,6 +56,7 @@ exports.onCreatePurchaserInfo = functions.firestore
   .document("users/{userId}/purchaser-info/{purchaserInfoId}")
   .onCreate(async (snap, context) => {
     const newValue = snap.data();
+    logger.debug({ new_value: newValue });
     const userId = context.params.userId;
     await checkUserIsNotExistAndCreate(userId);
 
@@ -84,10 +85,10 @@ exports.onCreateRevenuecatEventsForAffiliate = functions.firestore
   .onCreate(async (snap, context) => {
     const newValue = snap.data();
     logger.debug({ new_value: newValue });
-    logger.info({ "Event Type ": newValue.event_type });
+    logger.info({ "Event_Type ": newValue.type });
 
     // for Non renewing purchase
-    if (newValue.event_type == "NON_RENEWING_PURCHASE") {
+    if (newValue.type == "NON_RENEWING_PURCHASE") {
       logger.debug("Start NON_RENEWING_PURCHASE function");
       const store = newValue.store;
       logger.info(`Store value is ${store}`);
@@ -158,7 +159,17 @@ exports.onCreateRevenuecatEventsForAffiliate = functions.firestore
           price * 0.15,
       };
       logger.debug(data);
-      await affiliatedUser.ref.update({ data });
+      await affiliatedUser.ref.update({ ...data });
+      await getFirestore()
+        .collection("users")
+        .doc(affiliatedUser.id)
+        .collection("affiliate_partners")
+        .doc(userDoc.id)
+        .set({
+          affiliateRef: userDoc.ref,
+          affiliateCode: userDoc.data()?.affiliateCode,
+          createdAt: new Date(),
+        });
       logger.debug("Going for mark as true isCheckedForAffiliate");
       await userDoc.ref.update({ isCheckedForAffiliate: true });
       logger.info("Update done.");
@@ -166,7 +177,7 @@ exports.onCreateRevenuecatEventsForAffiliate = functions.firestore
       return;
     }
 
-    if (newValue.event_type == "RENEWAL") {
+    if (newValue.type == "RENEWAL") {
       logger.debug("Start RENEWAL function");
       const store = newValue.store;
       logger.info(`Store value is ${store}`);
@@ -225,7 +236,7 @@ exports.onCreateRevenuecatEventsForAffiliate = functions.firestore
 
       let newMap = {};
       switch (productId) {
-        case "bb_annual" || "bb-annual" || "full_access:bb-annual":
+        case "bb_annual":
           newMap = {
             totalAnnualAffiliate:
               (affiliatedUserData.totalAnnualAffiliate ?? 0) + 1,
@@ -239,7 +250,63 @@ exports.onCreateRevenuecatEventsForAffiliate = functions.firestore
               price * 0.15,
           };
           break;
-        case "bb_monthly" || "bb-monthly" || "full_access:bb-monthly":
+        case "bb-annual":
+          newMap = {
+            totalAnnualAffiliate:
+              (affiliatedUserData.totalAnnualAffiliate ?? 0) + 1,
+            totalAnnualRemainingAffiliate:
+              (affiliatedUserData.totalAnnualRemainingAffiliate ?? 0) + 1,
+            totalAnnualAffiliateAmount:
+              (affiliatedUserData.totalAnnualAffiliateAmount ?? 0) +
+              price * 0.15,
+            remainingAnnualAffiliateAmount:
+              (affiliatedUserData.remainingAnnualAffiliateAmount ?? 0) +
+              price * 0.15,
+          };
+          break;
+        case "full_access:bb-annual":
+          newMap = {
+            totalAnnualAffiliate:
+              (affiliatedUserData.totalAnnualAffiliate ?? 0) + 1,
+            totalAnnualRemainingAffiliate:
+              (affiliatedUserData.totalAnnualRemainingAffiliate ?? 0) + 1,
+            totalAnnualAffiliateAmount:
+              (affiliatedUserData.totalAnnualAffiliateAmount ?? 0) +
+              price * 0.15,
+            remainingAnnualAffiliateAmount:
+              (affiliatedUserData.remainingAnnualAffiliateAmount ?? 0) +
+              price * 0.15,
+          };
+          break;
+        case "bb_monthly":
+          newMap = {
+            totalMonthlyAffiliate:
+              (affiliatedUserData.totalMonthlyAffiliate ?? 0) + 1,
+            totalMonthlyRemainingAffiliate:
+              (affiliatedUserData.totalMonthlyRemainingAffiliate ?? 0) + 1,
+            totalMonthlyAffiliateAmount:
+              (affiliatedUserData.totalMonthlyAffiliateAmount ?? 0) +
+              price * 0.15,
+            remainingMonthlyAffiliateAmount:
+              (affiliatedUserData.remainingMonthlyAffiliateAmount ?? 0) +
+              price * 0.15,
+          };
+          break;
+        case "bb-monthly":
+          newMap = {
+            totalMonthlyAffiliate:
+              (affiliatedUserData.totalMonthlyAffiliate ?? 0) + 1,
+            totalMonthlyRemainingAffiliate:
+              (affiliatedUserData.totalMonthlyRemainingAffiliate ?? 0) + 1,
+            totalMonthlyAffiliateAmount:
+              (affiliatedUserData.totalMonthlyAffiliateAmount ?? 0) +
+              price * 0.15,
+            remainingMonthlyAffiliateAmount:
+              (affiliatedUserData.remainingMonthlyAffiliateAmount ?? 0) +
+              price * 0.15,
+          };
+          break;
+        case "full_access:bb-monthly":
           newMap = {
             totalMonthlyAffiliate:
               (affiliatedUserData.totalMonthlyAffiliate ?? 0) + 1,
@@ -265,7 +332,17 @@ exports.onCreateRevenuecatEventsForAffiliate = functions.firestore
         ...newMap,
       };
       logger.debug(data);
-      await affiliatedUser.ref.update({ data });
+      await affiliatedUser.ref.update({ ...data });
+      await getFirestore()
+        .collection("users")
+        .doc(affiliatedUser.id)
+        .collection("affiliate_partners")
+        .doc(userDoc.id)
+        .set({
+          affiliateRef: userDoc.ref,
+          affiliateCode: userDoc.data()?.affiliateCode,
+          createdAt: new Date(),
+        });
       logger.debug("Going for mark as true isCheckedForAffiliate");
       await userDoc.ref.update({ isCheckedForAffiliate: true });
       logger.info("Update done.");
@@ -278,8 +355,30 @@ exports.onCreateRevenuecatEvents = functions.firestore
   .document("revenuecat_events/{event_id}")
   .onCreate(async (snap, context) => {
     const newValue = snap.data();
+    logger.debug(newValue);
 
-    if (newValue.event_type === "NON_RENEWING_PURCHASE") {
+    logger.info({ Event_type: newValue.type });
+
+    if (newValue.type == "RENEWAL" || newValue.type == "INITIAL_PURCHASE") {
+      logger.debug("RENEWAL  INITIAL_PURCHASE function called.");
+      const userId = newValue.app_user_id;
+      await checkUserIsNotExistAndCreate(userId);
+
+      let userDoc = await getFirestore().collection("users").doc(userId).get();
+      if (!userDoc.exists) {
+        throw new Error("User does not exist");
+      }
+      const userData = userDoc.data();
+      const mailerLiteUserId: string = userData!.mailerLiteUserId;
+      const activeSubscriptionName = newValue.product_id;
+      logger.log("activeSubscriptionName", activeSubscriptionName);
+
+      const activeGroups: string[] = makePaidGroup(activeSubscriptionName);
+      await mailerLiteUserUpdate(mailerLiteUserId, activeGroups);
+      logger.log("RENEWAL function completed");
+    }
+
+    if (newValue.type === "NON_RENEWING_PURCHASE") {
       logger.log("NON_RENEWING_PURCHASE function called");
       const userId = newValue.app_user_id;
       await checkUserIsNotExistAndCreate(userId);
@@ -298,8 +397,8 @@ exports.onCreateRevenuecatEvents = functions.firestore
       logger.log("NON_RENEWING_PURCHASE function completed");
     }
 
-    if (newValue.event_type === "EXPIRATION") {
-      logger.log("EXPIRATION function called");
+    if (newValue.type === "EXPIRATION" || newValue.type === "CANCELLATION") {
+      logger.log("EXPIRATION or CANCELLATION function called");
       const userId = newValue.app_user_id;
       await checkUserIsNotExistAndCreate(userId);
 
@@ -314,10 +413,10 @@ exports.onCreateRevenuecatEvents = functions.firestore
       const inactiveGroupData = makeFreeGroup();
 
       await mailerLiteUserUpdate(mailerLiteUserId, inactiveGroupData);
-      logger.log("EXPIRATION function completed");
+      logger.log("EXPIRATION or CANCELLATION function completed");
     }
 
-    if (newValue.event_type === "TRANSFER") {
+    if (newValue.type === "TRANSFER") {
       logger.log("TRANSFER function called");
       const transferredFromUserId: string = newValue.transferred_from[0];
       const transferredToUserId: string = newValue.transferred_to[0];
@@ -334,10 +433,18 @@ exports.onCreateRevenuecatEvents = functions.firestore
         .get();
       if (subscriptionDoc.exists) {
         const subscriptionData = subscriptionDoc.data();
-        const activeSubscriptionName =
+        let activeSubscriptionName = "";
+        activeSubscriptionName =
           subscriptionData!["entitlements"]["Full Access"][
             "product_plan_identifier"
           ];
+        logger.info(`activeSubscriptionName data -> ${activeSubscriptionName}`);
+        if (!activeSubscriptionName) {
+          activeSubscriptionName = activeSubscriptionName =
+            subscriptionData!["entitlements"]["Full Access"][
+              "product_identifier"
+            ];
+        }
         const activeGroups: string[] = makePaidGroup(activeSubscriptionName);
         await mailerLiteUserUpdate(transferredFromUserId, activeGroups);
       }
@@ -346,7 +453,7 @@ exports.onCreateRevenuecatEvents = functions.firestore
       logger.log("TRANSFER function completed");
     }
 
-    if (newValue.event_type === "PRODUCT_CHANGE") {
+    if (newValue.type === "PRODUCT_CHANGE") {
       logger.log("PRODUCT_CHANGE function called");
       const userId = newValue.app_user_id;
       await checkUserIsNotExistAndCreate(userId);
@@ -437,6 +544,8 @@ exports.createAffiliatePartners = functions.firestore
   .document("users/{userId}/purchaser-info/{purchaserInfoId}")
   .onCreate(async (snap, context) => {
     const userId = context.params.userId;
+    logger.info(`Subscription purchased userId : ${userId}`);
+    const purchaserInfoData = snap.data();
     await checkUserIsNotExistAndCreate(userId);
 
     let userDoc = await getFirestore().collection("users").doc(userId).get();
@@ -480,13 +589,50 @@ exports.createAffiliatePartners = functions.firestore
         affiliateCode: userData.affiliateCode,
         createdAt: new Date(),
       });
+    let activeSubscriptionName = "";
+    try {
+      activeSubscriptionName =
+        purchaserInfoData["entitlements"]["Full Access"][
+          "product_plan_identifier"
+        ];
+    } catch (error) {
+      logger.error({ affiliatedUserId, affiliateUserData, purchaserInfoData });
+    }
 
-    // increment count by one
-    await affiliatedUser.docs[0].ref.update({
+    logger.info(`activeSubscriptionName:-> ${activeSubscriptionName}`);
+
+    let newMap = {};
+    switch (activeSubscriptionName) {
+      case "bb_annual":
+        newMap = { annual: (affiliateUserData["annual"] ?? 0) + 1 };
+        break;
+      case "bb_lifetime":
+        newMap = { lifetime: (affiliateUserData["lifetime"] ?? 0) + 1 };
+        break;
+      case "bb_monthly":
+        newMap = { monthly: (affiliateUserData["monthly"] ?? 0) + 1 };
+        break;
+      case "bb-annual":
+        newMap = { annual: (affiliateUserData["annual"] ?? 0) + 1 };
+        break;
+      case "bb-monthly":
+        newMap = { monthly: (affiliateUserData["monthly"] ?? 0) + 1 };
+        break;
+      case "bb_lifetime":
+        newMap = { lifetime: (affiliateUserData["lifetime"] ?? 0) + 1 };
+        break;
+      default:
+        break;
+    }
+
+    const currentSubscriptionUpdate = {
       totalAffiliateCount: (affiliateUserData.totalAffiliateCount ?? 0) + 1,
       remainingPayAffiliateCount:
         (affiliateUserData.remainingPayAffiliateCount ?? 0) + 1,
-    });
+      ...newMap,
+    };
+    logger.log(currentSubscriptionUpdate);
+    await affiliatedUser.docs[0].ref.update(currentSubscriptionUpdate);
   });
 
 exports.createAndUpdateUserNameInMailerLite = functions.firestore
