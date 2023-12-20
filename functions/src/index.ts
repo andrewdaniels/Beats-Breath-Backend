@@ -169,6 +169,7 @@ exports.onCreateRevenuecatEventsForAffiliate = functions.firestore
           affiliateRef: userDoc.ref,
           affiliateCode: userDoc.data()?.affiliateCode,
           createdAt: new Date(),
+          subscriptionType: "LifeTime",
         });
       logger.debug("Going for mark as true isCheckedForAffiliate");
       await userDoc.ref.update({ isCheckedForAffiliate: true });
@@ -235,36 +236,12 @@ exports.onCreateRevenuecatEventsForAffiliate = functions.firestore
       // check for product id
 
       let newMap = {};
+      let subscription_type = "";
       switch (productId) {
         case "bb_annual":
-          newMap = {
-            totalAnnualAffiliate:
-              (affiliatedUserData.totalAnnualAffiliate ?? 0) + 1,
-            totalAnnualRemainingAffiliate:
-              (affiliatedUserData.totalAnnualRemainingAffiliate ?? 0) + 1,
-            totalAnnualAffiliateAmount:
-              (affiliatedUserData.totalAnnualAffiliateAmount ?? 0) +
-              price * 0.15,
-            remainingAnnualAffiliateAmount:
-              (affiliatedUserData.remainingAnnualAffiliateAmount ?? 0) +
-              price * 0.15,
-          };
-          break;
         case "bb-annual":
-          newMap = {
-            totalAnnualAffiliate:
-              (affiliatedUserData.totalAnnualAffiliate ?? 0) + 1,
-            totalAnnualRemainingAffiliate:
-              (affiliatedUserData.totalAnnualRemainingAffiliate ?? 0) + 1,
-            totalAnnualAffiliateAmount:
-              (affiliatedUserData.totalAnnualAffiliateAmount ?? 0) +
-              price * 0.15,
-            remainingAnnualAffiliateAmount:
-              (affiliatedUserData.remainingAnnualAffiliateAmount ?? 0) +
-              price * 0.15,
-          };
-          break;
         case "full_access:bb-annual":
+          subscription_type = "Annual";
           newMap = {
             totalAnnualAffiliate:
               (affiliatedUserData.totalAnnualAffiliate ?? 0) + 1,
@@ -279,34 +256,9 @@ exports.onCreateRevenuecatEventsForAffiliate = functions.firestore
           };
           break;
         case "bb_monthly":
-          newMap = {
-            totalMonthlyAffiliate:
-              (affiliatedUserData.totalMonthlyAffiliate ?? 0) + 1,
-            totalMonthlyRemainingAffiliate:
-              (affiliatedUserData.totalMonthlyRemainingAffiliate ?? 0) + 1,
-            totalMonthlyAffiliateAmount:
-              (affiliatedUserData.totalMonthlyAffiliateAmount ?? 0) +
-              price * 0.15,
-            remainingMonthlyAffiliateAmount:
-              (affiliatedUserData.remainingMonthlyAffiliateAmount ?? 0) +
-              price * 0.15,
-          };
-          break;
         case "bb-monthly":
-          newMap = {
-            totalMonthlyAffiliate:
-              (affiliatedUserData.totalMonthlyAffiliate ?? 0) + 1,
-            totalMonthlyRemainingAffiliate:
-              (affiliatedUserData.totalMonthlyRemainingAffiliate ?? 0) + 1,
-            totalMonthlyAffiliateAmount:
-              (affiliatedUserData.totalMonthlyAffiliateAmount ?? 0) +
-              price * 0.15,
-            remainingMonthlyAffiliateAmount:
-              (affiliatedUserData.remainingMonthlyAffiliateAmount ?? 0) +
-              price * 0.15,
-          };
-          break;
         case "full_access:bb-monthly":
+          subscription_type = "Monthly";
           newMap = {
             totalMonthlyAffiliate:
               (affiliatedUserData.totalMonthlyAffiliate ?? 0) + 1,
@@ -342,6 +294,7 @@ exports.onCreateRevenuecatEventsForAffiliate = functions.firestore
           affiliateRef: userDoc.ref,
           affiliateCode: userDoc.data()?.affiliateCode,
           createdAt: new Date(),
+          subscriptionType: subscription_type,
         });
       logger.debug("Going for mark as true isCheckedForAffiliate");
       await userDoc.ref.update({ isCheckedForAffiliate: true });
@@ -397,8 +350,8 @@ exports.onCreateRevenuecatEvents = functions.firestore
       logger.log("NON_RENEWING_PURCHASE function completed");
     }
 
-    if (newValue.type === "EXPIRATION" || newValue.type === "CANCELLATION") {
-      logger.log("EXPIRATION or CANCELLATION function called");
+    if (newValue.type === "EXPIRATION" || newValue.type === "BILLING_ERROR") {
+      logger.log("EXPIRATION or BILLING_ERROR function called");
       const userId = newValue.app_user_id;
       await checkUserIsNotExistAndCreate(userId);
 
@@ -413,7 +366,7 @@ exports.onCreateRevenuecatEvents = functions.firestore
       const inactiveGroupData = makeFreeGroup();
 
       await mailerLiteUserUpdate(mailerLiteUserId, inactiveGroupData);
-      logger.log("EXPIRATION or CANCELLATION function completed");
+      logger.log("EXPIRATION or BILLING_ERROR function completed");
     }
 
     if (newValue.type === "TRANSFER") {
@@ -540,100 +493,6 @@ exports.migrateInMailerLite = functions
     res.status(200).send(`userDocs, ${userDocs.docs.length}`);
   });
 
-exports.createAffiliatePartners = functions.firestore
-  .document("users/{userId}/purchaser-info/{purchaserInfoId}")
-  .onCreate(async (snap, context) => {
-    const userId = context.params.userId;
-    logger.info(`Subscription purchased userId : ${userId}`);
-    const purchaserInfoData = snap.data();
-    await checkUserIsNotExistAndCreate(userId);
-
-    let userDoc = await getFirestore().collection("users").doc(userId).get();
-    const userData = userDoc.data();
-
-    if (!userData?.affiliateCode) {
-      logger.log("No affiliate codes");
-      logger.log({
-        message: "User is not coming throve from affiliate code",
-        userId,
-      });
-      return;
-    }
-    const affiliatedUser = await getFirestore()
-      .collection("users")
-      .where("myAffiliateCode", "==", userData.affiliateCode)
-      .get();
-
-    if (affiliatedUser.empty) {
-      logger.log("No affiliated user found");
-      logger.log({
-        message: "affiliateCode not found.",
-        userId,
-        affiliateCode: userData.affiliateCode,
-      });
-      return;
-    }
-
-    const affiliateUserData = affiliatedUser.docs[0].data();
-    logger.info(affiliateUserData);
-    const affiliatedUserId = affiliatedUser.docs[0].id;
-
-    // create affiliate partner
-    await getFirestore()
-      .collection("users")
-      .doc(affiliatedUserId)
-      .collection("affiliate_partners")
-      .doc(context.params.userId)
-      .set({
-        affiliateRef: affiliatedUser.docs[0].ref,
-        affiliateCode: userData.affiliateCode,
-        createdAt: new Date(),
-      });
-    let activeSubscriptionName = "";
-    try {
-      activeSubscriptionName =
-        purchaserInfoData["entitlements"]["Full Access"][
-          "product_plan_identifier"
-        ];
-    } catch (error) {
-      logger.error({ affiliatedUserId, affiliateUserData, purchaserInfoData });
-    }
-
-    logger.info(`activeSubscriptionName:-> ${activeSubscriptionName}`);
-
-    let newMap = {};
-    switch (activeSubscriptionName) {
-      case "bb_annual":
-        newMap = { annual: (affiliateUserData["annual"] ?? 0) + 1 };
-        break;
-      case "bb_lifetime":
-        newMap = { lifetime: (affiliateUserData["lifetime"] ?? 0) + 1 };
-        break;
-      case "bb_monthly":
-        newMap = { monthly: (affiliateUserData["monthly"] ?? 0) + 1 };
-        break;
-      case "bb-annual":
-        newMap = { annual: (affiliateUserData["annual"] ?? 0) + 1 };
-        break;
-      case "bb-monthly":
-        newMap = { monthly: (affiliateUserData["monthly"] ?? 0) + 1 };
-        break;
-      case "bb_lifetime":
-        newMap = { lifetime: (affiliateUserData["lifetime"] ?? 0) + 1 };
-        break;
-      default:
-        break;
-    }
-
-    const currentSubscriptionUpdate = {
-      totalAffiliateCount: (affiliateUserData.totalAffiliateCount ?? 0) + 1,
-      remainingPayAffiliateCount:
-        (affiliateUserData.remainingPayAffiliateCount ?? 0) + 1,
-      ...newMap,
-    };
-    logger.log(currentSubscriptionUpdate);
-    await affiliatedUser.docs[0].ref.update(currentSubscriptionUpdate);
-  });
 
 exports.createAndUpdateUserNameInMailerLite = functions.firestore
   .document("users/{userId}")
