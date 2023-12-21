@@ -1,8 +1,12 @@
 import axios from "axios";
 import { getFirestore } from "firebase-admin/firestore";
-import { makeFreeGroup } from "./groups/data";
+import { getGroups, makeFreeGroup } from "./groups/data";
 import * as logger from "firebase-functions/logger";
+import MailerLite from "@mailerlite/mailerlite-nodejs";
 
+const mailerLite = new MailerLite({
+  api_key: process.env.MAILERLITE_TOKEN!,
+});
 export async function mailerLiteUserCreate(
   emailId: string,
   userGroup: string[]
@@ -35,27 +39,35 @@ export async function mailerLiteUserCreate(
 export async function mailerLiteUserUpdate(
   mailerLiteUserId: string,
   userGroup: string[]
-): Promise<string> {
-  const headers = {
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${process.env.MAILERLITE_TOKEN}`,
-    Accept: "application/json",
-  };
+): Promise<void> {
+  const groups = getGroups();
+  logger.debug(groups);
 
-  const data = await axios.put(
-    `https://connect.mailerlite.com/api/subscribers/${mailerLiteUserId}`,
-    {
-      groups: userGroup,
-    },
-    { headers }
-  );
-  logger.log(data.status);
-  logger.log(data.data.data);
-  if (data.status === 200) {
-    logger.log({
-      mailerLiteId: data.data.data.id,
-    });
-    return data.data.data.id as string;
+  for (let i = 0; i < groups.length; i++) {
+    logger.debug(groups[i].id);
+
+    await mailerLite.groups
+      .unAssignSubscriber(mailerLiteUserId, groups[i].id)
+      .then((response) => {
+        logger.info(response.data);
+      })
+      .catch((error) => {
+        if (error.response) logger.info(error.response.data);
+      });
+  }
+  logger.debug("Going for assign groups");
+
+  for (let i = 0; i < userGroup.length; i++) {
+    logger.debug(userGroup[i]);
+
+    await mailerLite.groups
+      .assignSubscriber(mailerLiteUserId, userGroup[i])
+      .then((response) => {
+        logger.info(response.data);
+      })
+      .catch((error) => {
+        if (error.response) logger.info(error.response.data);
+      });
   }
   throw new Error("MailerLite user creation failed");
 }
